@@ -5,21 +5,22 @@ from flask import redirect
 from flask import render_template
 from flask import request
 from flask import url_for
-from flask import jsonify
-from flask import Response
 from werkzeug.exceptions import abort
+from flask import Response
+from flask import jsonify
 
 from flaskr.auth.auth import auth
 from flaskr.auth.queries import get_user_by_username
 from flaskr.db import get_db
-from flaskr.blog.queries import (
-    create_post, delete_post, get_post, update_post, post_list
+from flaskr.comment.queries import (
+    create_comment, comment_list, get_comment,
+    update_comment, delete_comment
 )
 
-bp = Blueprint("blog", __name__)
 
+bp = Blueprint("comment", __name__)
 
-def check_post(id, check_author=True):
+def check_comment(id, check_author=True):
     """Get a post and its author by id.
 
     Checks that the id exists and optionally that the current user is
@@ -32,52 +33,50 @@ def check_post(id, check_author=True):
     :raise 403: if the current user isn't the author
     """
 
-    post = get_post(get_db(), id)
-    if post is None:
-        abort(404, "Post id {0} doesn't exist.".format(id))
-
-    if check_author and post["author_id"] != g.user["id"]:
+    comment = get_comment(get_db(), id)
+    if comment is None:
+        abort(404, "Comment id {0} doesn't exist.".format(id))
+    user  = get_user_by_username(db, request.authorization['username'])
+    if check_author and comment["author_id"] != user["id"]:
         abort(403)
 
-    return post
+    return comment
 
 
-@bp.route("/post", methods=("GET", "POST"))
+@bp.route("/posts/<int:post_id>/comments/", methods=("GET", "POST"))
 @auth.login_required
 def create():
-    """Create a new post for the current user."""
+    """Create a new comment for the current user."""
     if request.method == "POST":
         error = None
         db = get_db()
         json_data = request.get_json()
-        title = json_data['title']
         body = json_data['body']
         user = get_user_by_username(db, request.authorization['username'])
-        create_post(db, title, body, user['id'])
-        return Response("Post successfully created", status=200)
-        
+        create_comment(db, body, user['id'])
+        return Response("Comment successfully created", status=200)
+           
     return Response("Method is not POST",status=401)
 
 
-@bp.route("/<int:id>/update", methods=("GET", "POST"))
+@bp.route("/posts/<int:post_id>/comments/<int:id>/", methods=("GET", "POST"))
 @auth.login_required
 def update(id):
     """Update a post if the current user is the author."""
-    post = check_post(id)
+    comment = check_comment(id)
 
     if request.method == "POST":
         error = None
         db = get_db()
         json_data = request.get_json()
-        title = json_data['title']
         body = json_data['body']
-        update_post(db, title, body, id)
+        update_post(db, body, id)
         return Response("Updated!", status=200)
-       
-    return Response("Method is not POST",status=40)
+            
+    return Response("Method is not POST",status=400)
 
 
-@bp.route("/<int:id>/delete", methods=("POST",))
+@bp.route("/posts/<int:post_id>/comments/<int:id>/", methods=("POST",))
 @auth.login_required
 def delete(id):
     """Delete a post.
@@ -85,7 +84,7 @@ def delete(id):
     Ensures that the post exists and that the logged in user is the
     author of the post.
     """
-    check_post(id)
+    check_comment(id)
     db = get_db()
-    delete_post(db, id)
-    return Response("Post deleted",status=200)
+    delete_comment(db, id)
+    return Response("Comment deleted", status=200)
